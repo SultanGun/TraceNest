@@ -1,5 +1,7 @@
 """Base abstraction and security guards for optional AI providers."""
 
+import ipaddress
+import urllib.parse
 from abc import ABC, abstractmethod
 from typing import List
 
@@ -58,6 +60,39 @@ class AIProvider(ABC):
 
 
 def is_local_endpoint(url: str) -> bool:
-    """Check if the provided URL points to localhost or loopback."""
-    lower = url.lower()
-    return "localhost" in lower or "127.0.0.1" in lower or "::1" in lower or "0.0.0.0" in lower
+    """Check if the provided URL points safely to a local loopback address.
+
+    Strict validation prevents SSRF, remote data leakage, and hostname/IP bypasses:
+    - Only 'http' and 'https' schemes are accepted.
+    - Userinfo (username/password) is rejected.
+    - Hostname must be strictly 'localhost', 'localhost.localdomain', end with '.localhost',
+      or resolve to an IPv4/IPv6 loopback address (127.0.0.0/8, ::1).
+    - Link-local (e.g. AWS IMDS 169.254.169.254), private ranges (10.x, 192.168.x),
+      and unspecified 0.0.0.0 are rejected.
+    """
+    try:
+        parsed = urllib.parse.urlsplit(url.strip())
+    except Exception:
+        return False
+
+    if parsed.scheme.lower() not in ("http", "https"):
+        return False
+
+    if parsed.username or parsed.password:
+        return False
+
+    host = parsed.hostname
+    if not host:
+        return False
+
+    host_lower = host.lower().strip("[]")
+
+    # Standard loopback domain names per RFC 6761
+    if host_lower in {"localhost", "localhost.localdomain"} or host_lower.endswith(".localhost"):
+        return True
+
+    try:
+        ip = ipaddress.ip_address(host_lower)
+        return ip.is_loopback
+    except ValueError:
+        return False

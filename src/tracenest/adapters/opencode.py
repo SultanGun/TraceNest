@@ -65,3 +65,30 @@ class OpenCodeAdapter(AgentAdapter):
             }
             with open(history_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(record) + "\n")
+
+    def attach_session_summary(
+        self,
+        repo_root: Path,
+        session_id: str,
+        files_changed_count: int,
+        findings_count: int,
+        critical_findings_count: int,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """Record structured review outcome to .opencode/tracenest_sessions.jsonl."""
+        opencode_dir = repo_root / ".opencode"
+        if not opencode_dir.exists():
+            return False
+        opencode_dir.mkdir(parents=True, exist_ok=True)
+        history_file = opencode_dir / "tracenest_sessions.jsonl"
+        record = {
+            "session_id": session_id,
+            "files_changed": files_changed_count,
+            "findings_count": findings_count,
+            "critical_findings_count": critical_findings_count,
+            "has_critical": critical_findings_count > 0,
+            "metadata": metadata or {},
+        }
+        with open(history_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
+        return True

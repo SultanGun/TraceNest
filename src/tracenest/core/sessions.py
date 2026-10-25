@@ -13,6 +13,7 @@ from tracenest.models import (
     SessionMetadata,
 )
 from tracenest.scanners.rules import run_all_scanners
+from tracenest.scanners.secrets import redact_text
 from tracenest.storage.database import Database
 
 
@@ -41,7 +42,12 @@ def create_review_session(
     # 2. Run deterministic scanners
     findings = run_all_scanners(changes, config)
 
-    # 3. Create SessionMetadata
+    # 3. Redact sensitive values from diff_text before persistence or export
+    for change in changes:
+        if change.diff_text:
+            change.diff_text = redact_text(change.diff_text)
+
+    # 4. Create SessionMetadata
     now_utc = datetime.now(timezone.utc).isoformat()
     timestamp_slug = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     session_id = f"sess_{timestamp_slug}_{uuid.uuid4().hex[:6]}"

@@ -301,6 +301,19 @@ def analyze_repository_changes(
                     diff_text=diff_text,
                 )
             )
+        except FileScopeError as fse:
+            changes.append(
+                FileChange(
+                    path=rel_path,
+                    old_path=old_path.replace("\\", "/") if old_path else None,
+                    change_type=change_type,
+                    additions=0,
+                    deletions=0,
+                    is_binary=False,
+                    size_bytes=0,
+                    diff_text=f"[SECURITY ALERT: {fse}]",
+                )
+            )
         except Exception:
             continue
 

@@ -145,6 +145,30 @@ def run_all_scanners(changes: List[FileChange], config: TraceNestConfig) -> List
     """Execute all configured deterministic scanners across changed files."""
     all_findings: List[Finding] = []
 
+    # 0. Path Traversal & Escaping Symlink Checks
+    for change in changes:
+        if change.diff_text and "[SECURITY ALERT: Path traversal" in change.diff_text:
+            rule_id = "SCP-PATH-TRAVERSAL"
+            title = "Path Traversal or Escaping Symlink Detected"
+            finding_id = generate_finding_id(rule_id, change.path, None, title)
+            all_findings.append(
+                Finding(
+                    finding_id=finding_id,
+                    rule_id=rule_id,
+                    severity=FindingSeverity.CRITICAL,
+                    title=title,
+                    explanation=(
+                        f"File '{change.path}' escapes the repository boundary or targets a "
+                        "filesystem location outside the repository root."
+                    ),
+                    file_path=change.path,
+                    line_number=None,
+                    evidence=change.diff_text,
+                    recommendation="Investigate immediately. Remove escaping symlinks or directory traversal links.",
+                    confidence="HIGH",
+                )
+            )
+
     # 1. Scope boundary checks
     if config.rules.scope_guard and config.scope.include_paths:
         all_findings.extend(check_scope_boundaries(changes, config.scope.include_paths))

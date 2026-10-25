@@ -16,6 +16,15 @@ SECRET_PATTERNS: List[Tuple[str, str, FindingSeverity, Pattern[str], str]] = [
         "Revoke the AWS key and use AWS IAM roles or environment variables injected via secret management.",
     ),
     (
+        "SEC-AWS-SECRET-KEY",
+        "AWS Secret Access Key Detected",
+        FindingSeverity.CRITICAL,
+        re.compile(
+            r"""(?i)(?:aws_secret_access_key|aws_secret_key)\s*[:=]\s*['"]?([A-Za-z0-9/+=]{40})['"]?"""
+        ),
+        "Revoke the AWS secret access key immediately and rotate all associated IAM credentials.",
+    ),
+    (
         "SEC-GH-TOKEN",
         "GitHub Personal Access Token Detected",
         FindingSeverity.CRITICAL,
@@ -26,8 +35,15 @@ SECRET_PATTERNS: List[Tuple[str, str, FindingSeverity, Pattern[str], str]] = [
         "SEC-OPENAI-KEY",
         "OpenAI / LLM API Key Detected",
         FindingSeverity.CRITICAL,
-        re.compile(r"sk-[a-zA-Z0-9]{20,}"),
+        re.compile(r"sk-(?:proj-|ant-|admin-)?[a-zA-Z0-9_\-]{20,}"),
         "Revoke the API key and configure it securely via environment variables or a local secret store.",
+    ),
+    (
+        "SEC-BEARER-TOKEN",
+        "Bearer Authorization Token Detected",
+        FindingSeverity.HIGH,
+        re.compile(r"""(?i)\bbearer\s+([A-Za-z0-9_\-\.]{20,})"""),
+        "Revoke the bearer token and inject auth headers dynamically from environment variables.",
     ),
     (
         "SEC-SLACK-TOKEN",
@@ -40,7 +56,7 @@ SECRET_PATTERNS: List[Tuple[str, str, FindingSeverity, Pattern[str], str]] = [
         "SEC-PRIVATE-KEY",
         "Private Cryptographic Key Header Detected",
         FindingSeverity.CRITICAL,
-        re.compile(r"-----BEGIN (?:RSA|DSA|EC|OPENSSH|PGP|PRIVATE) KEY"),
+        re.compile(r"-----BEGIN (?:[A-Z0-9 -]+)?PRIVATE KEY"),
         "Do not commit private keys to version control. Use certificate managers or secure keyrings.",
     ),
     (
@@ -82,12 +98,14 @@ FALSE_POSITIVE_KEYWORDS = {
 
 
 def redact_secret_string(value: str) -> str:
-    """Redact sensitive string retaining only outer bounds or masked tokens."""
+    """Redact sensitive string completely without leaking the secret suffix."""
+    if value.upper().startswith("-----BEGIN"):
+        return "[REDACTED_PRIVATE_KEY]"
     if len(value) <= 8:
         return "[REDACTED]"
-    prefix = value[:4]
-    suffix = value[-4:]
-    return f"{prefix}...[REDACTED]...{suffix}"
+    # Keep only leading 3 chars for recognition context (e.g., 'sk-...', 'ghp...'), never the suffix!
+    prefix = value[:3]
+    return f"{prefix}...[REDACTED]"
 
 
 def redact_line(line: str) -> str:
@@ -99,6 +117,26 @@ def redact_line(line: str) -> str:
             raw = m.group(0)
             redacted = redacted[: m.start()] + redact_secret_string(raw) + redacted[m.end() :]
     return redacted
+
+
+def redact_text(text: str) -> str:
+    """Scan and redact any known secret pattern occurrences from multiline text."""
+    if not text:
+        return text
+    # 1. Mask multiline private key blocks
+    redacted = re.sub(
+        r"-----BEGIN [A-Z0-9 -]+KEY-----[\s\S]*?-----END [A-Z0-9 -]+KEY-----",
+        "[REDACTED_PRIVATE_KEY]",
+        text,
+        flags=re.IGNORECASE,
+    )
+    # 2. Line-by-line redaction preserving trailing newline
+    has_trailing_newline = redacted.endswith("\n")
+    lines = [redact_line(line) for line in redacted.splitlines()]
+    result = "\n".join(lines)
+    if has_trailing_newline and not result.endswith("\n"):
+        result += "\n"
+    return result
 
 
 def is_false_positive(snippet: str) -> bool:

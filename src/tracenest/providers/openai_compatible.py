@@ -13,6 +13,7 @@ from tracenest.exceptions import (
 )
 from tracenest.models import Finding
 from tracenest.providers.base import AIProvider, is_local_endpoint
+from tracenest.scanners.secrets import redact_line
 
 
 class OpenAICompatibleProvider(AIProvider):
@@ -57,15 +58,18 @@ class OpenAICompatibleProvider(AIProvider):
         }
 
         try:
-            with httpx.Client(timeout=self.config.timeout_seconds) as client:
+            with httpx.Client(
+                timeout=self.config.timeout_seconds, follow_redirects=False
+            ) as client:
                 resp = client.post(endpoint, headers=headers, json=payload)
                 if resp.status_code == 401 or resp.status_code == 403:
                     raise ProviderAuthError(
                         f"Authentication failed with status {resp.status_code}. Verify your {self.config.api_key_env} key."
                     )
                 if resp.status_code != 200:
+                    safe_err = redact_line(resp.text[:200])
                     raise ProviderError(
-                        f"API provider returned error status {resp.status_code}: {resp.text[:200]}"
+                        f"API provider returned error status {resp.status_code}: {safe_err}"
                     )
                 data = resp.json()
                 choices = data.get("choices", [])
@@ -79,4 +83,7 @@ class OpenAICompatibleProvider(AIProvider):
                 f"API request timed out after {self.config.timeout_seconds}s at {endpoint}."
             )
         except httpx.RequestError as e:
-            raise ProviderError(f"Network error communicating with AI provider at {endpoint}: {e}")
+            safe_e = redact_line(str(e))
+            raise ProviderError(
+                f"Network error communicating with AI provider at {endpoint}: {safe_e}"
+            )

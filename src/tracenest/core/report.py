@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from tracenest.models import FindingSeverity, SessionMetadata
+from tracenest.scanners.secrets import redact_text
 
 REPORT_SCHEMA_VERSION = "tracenest-report-v1"
 
@@ -162,7 +163,13 @@ def generate_json_report(session: SessionMetadata) -> str:
                 "INFO": sum(1 for f in session.findings if f.severity == FindingSeverity.INFO),
             },
         },
-        "file_changes": [c.model_dump() for c in session.file_changes],
+        "file_changes": [
+            {
+                **c.model_dump(),
+                "diff_text": redact_text(c.diff_text) if c.diff_text else None,
+            }
+            for c in session.file_changes
+        ],
         "findings": [f.model_dump() for f in session.findings],
         "ai_summary": session.ai_summary,
         "disclaimer": (

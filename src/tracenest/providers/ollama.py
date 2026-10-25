@@ -11,6 +11,7 @@ from tracenest.exceptions import (
 )
 from tracenest.models import Finding
 from tracenest.providers.base import AIProvider, is_local_endpoint
+from tracenest.scanners.secrets import redact_line
 
 
 class OllamaProvider(AIProvider):
@@ -33,11 +34,14 @@ class OllamaProvider(AIProvider):
         }
 
         try:
-            with httpx.Client(timeout=self.config.timeout_seconds) as client:
+            with httpx.Client(
+                timeout=self.config.timeout_seconds, follow_redirects=False
+            ) as client:
                 resp = client.post(endpoint, json=payload)
                 if resp.status_code != 200:
+                    safe_err = redact_line(resp.text[:200])
                     raise ProviderError(
-                        f"Ollama returned HTTP status {resp.status_code}: {resp.text}"
+                        f"Ollama returned HTTP status {resp.status_code}: {safe_err}"
                     )
                 data = resp.json()
                 if "response" not in data:
@@ -48,4 +52,5 @@ class OllamaProvider(AIProvider):
                 f"Ollama request timed out after {self.config.timeout_seconds}s at {endpoint}."
             )
         except httpx.RequestError as e:
-            raise ProviderError(f"Failed to communicate with local Ollama at {endpoint}: {e}")
+            safe_e = redact_line(str(e))
+            raise ProviderError(f"Failed to communicate with local Ollama at {endpoint}: {safe_e}")

@@ -19,6 +19,7 @@ from tracenest.models import (
     SessionMetadata,
     Snapshot,
 )
+from tracenest.scanners.secrets import redact_text
 from tracenest.storage.migrations import apply_migrations
 
 
@@ -182,6 +183,7 @@ class Database:
                 conn.execute("DELETE FROM findings WHERE session_id = ?", (session.session_id,))
 
                 for change in session.file_changes:
+                    safe_diff = redact_text(change.diff_text) if change.diff_text else None
                     conn.execute(
                         insert_change,
                         (
@@ -193,7 +195,7 @@ class Database:
                             change.deletions,
                             1 if change.is_binary else 0,
                             change.size_bytes,
-                            change.diff_text,
+                            safe_diff,
                             change.old_hash,
                             change.new_hash,
                         ),
