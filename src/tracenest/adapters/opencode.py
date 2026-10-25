@@ -2,9 +2,21 @@
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from tracenest.adapters.base import AgentAdapter
+from tracenest.scanners.secrets import redact_line
+
+
+def _sanitize_metadata(data: Any) -> Any:
+    """Recursively sanitize metadata strings to redact potential credentials."""
+    if isinstance(data, dict):
+        return {str(k): _sanitize_metadata(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [_sanitize_metadata(v) for v in data]
+    elif isinstance(data, str):
+        return redact_line(data)
+    return data
 
 
 class OpenCodeAdapter(AgentAdapter):
@@ -59,12 +71,17 @@ class OpenCodeAdapter(AgentAdapter):
         opencode_dir = repo_root / ".opencode"
         if opencode_dir.is_dir():
             history_file = opencode_dir / "tracenest_sessions.jsonl"
+            clean_metadata = _sanitize_metadata(metadata or {})
             record = {
                 "session_id": session_id,
-                "metadata": metadata or {},
+                "metadata": clean_metadata,
             }
-            with open(history_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps(record) + "\n")
+            try:
+                with open(history_file, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(record, default=str) + "\n")
+                    f.flush()
+            except OSError:
+                pass
 
     def attach_session_summary(
         self,
@@ -77,18 +94,44 @@ class OpenCodeAdapter(AgentAdapter):
     ) -> bool:
         """Record structured review outcome to .opencode/tracenest_sessions.jsonl."""
         opencode_dir = repo_root / ".opencode"
-        if not opencode_dir.exists():
+        if not opencode_dir.is_dir():
             return False
-        opencode_dir.mkdir(parents=True, exist_ok=True)
         history_file = opencode_dir / "tracenest_sessions.jsonl"
+        clean_metadata = _sanitize_metadata(metadata or {})
         record = {
             "session_id": session_id,
             "files_changed": files_changed_count,
             "findings_count": findings_count,
             "critical_findings_count": critical_findings_count,
             "has_critical": critical_findings_count > 0,
-            "metadata": metadata or {},
+            "metadata": clean_metadata,
         }
-        with open(history_file, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record) + "\n")
-        return True
+        try:
+            with open(history_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, default=str) + "\n")
+                f.flush()
+            return True
+        except OSError:
+            return False
+
+    def read_session_history(self, repo_root: Path) -> List[Dict[str, Any]]:
+        """Safely read session records from .opencode/tracenest_sessions.jsonl, ignoring malformed lines."""
+        history_file = repo_root / ".opencode" / "tracenest_sessions.jsonl"
+        if not history_file.is_file():
+            return []
+        records = []
+        try:
+            with open(history_file, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                        if isinstance(record, dict):
+                            records.append(record)
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+        except OSError:
+            return []
+        return records

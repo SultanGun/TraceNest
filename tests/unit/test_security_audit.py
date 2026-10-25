@@ -305,3 +305,72 @@ def test_opencode_adapter_attach_session_summary(tmp_path):
     assert data["files_changed"] == 3
     assert data["critical_findings_count"] == 1
     assert data["has_critical"] is True
+
+
+def test_is_local_endpoint_fqdn_and_loopback_proxy_trust():
+    assert is_local_endpoint("http://localhost.:11434") is True
+    assert is_local_endpoint("http://127.0.0.1.:8000") is True
+
+    cfg = AIConfig(
+        provider="ollama",
+        base_url="http://localhost:11434",
+        allow_remote_data_sharing=False,
+    )
+    prov = OllamaProvider(cfg)
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"response": "Local response"}
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_instance = MagicMock()
+        mock_instance.__enter__.return_value = mock_instance
+        mock_instance.post.return_value = mock_resp
+        mock_client_cls.return_value = mock_instance
+
+        prov.explain_changes("diff", [])
+        _, kwargs = mock_client_cls.call_args
+        # Verify trust_env is False for local loopback
+        assert kwargs.get("trust_env") is False
+
+
+def test_opencode_metadata_secret_redaction(tmp_path):
+    opencode_dir = tmp_path / ".opencode"
+    opencode_dir.mkdir()
+    adapter = OpenCodeAdapter()
+
+    secret = "ghp_1234567890abcdefghijklmnopqrstuvwxyzAB"
+    adapter.attach_session_summary(
+        repo_root=tmp_path,
+        session_id="sess_sec_meta",
+        files_changed_count=1,
+        findings_count=0,
+        critical_findings_count=0,
+        metadata={"token": secret, "nested": [f"Bearer {secret}"]},
+    )
+
+    history_file = opencode_dir / "tracenest_sessions.jsonl"
+    content = history_file.read_text(encoding="utf-8")
+    assert secret not in content
+    assert "[REDACTED]" in content
+
+
+def test_opencode_read_session_history_with_malformed_records(tmp_path):
+    opencode_dir = tmp_path / ".opencode"
+    opencode_dir.mkdir()
+    history_file = opencode_dir / "tracenest_sessions.jsonl"
+
+    # Write a mixture of valid, empty, and corrupted JSON lines
+    history_file.write_text(
+        '{"session_id": "sess_1", "valid": true}\n'
+        "\n"
+        '{"corrupted_json": INVALID}\n'
+        "not json at all\n"
+        '{"session_id": "sess_2", "valid": true}\n',
+        encoding="utf-8",
+    )
+
+    adapter = OpenCodeAdapter()
+    records = adapter.read_session_history(tmp_path)
+    assert len(records) == 2
+    assert records[0]["session_id"] == "sess_1"
+    assert records[1]["session_id"] == "sess_2"

@@ -21,7 +21,8 @@ class OpenAICompatibleProvider(AIProvider):
 
     def explain_changes(self, diff_summary: str, findings: List[Finding]) -> str:
         base_url = self.config.base_url.rstrip("/")
-        if not is_local_endpoint(base_url) and not self.config.allow_remote_data_sharing:
+        is_local = is_local_endpoint(base_url)
+        if not is_local and not self.config.allow_remote_data_sharing:
             raise DataSharingNotAllowedError(
                 f"External endpoint '{base_url}' requested, but remote data sharing is disabled. "
                 "Set allow_remote_data_sharing = true in tracenest.toml or pass --allow-remote to permit."
@@ -59,7 +60,9 @@ class OpenAICompatibleProvider(AIProvider):
 
         try:
             with httpx.Client(
-                timeout=self.config.timeout_seconds, follow_redirects=False
+                timeout=self.config.timeout_seconds,
+                follow_redirects=False,
+                trust_env=not is_local,
             ) as client:
                 resp = client.post(endpoint, headers=headers, json=payload)
                 if resp.status_code == 401 or resp.status_code == 403:

@@ -85,7 +85,7 @@ def is_local_endpoint(url: str) -> bool:
     if not host:
         return False
 
-    host_lower = host.lower().strip("[]")
+    host_lower = host.lower().strip("[]").rstrip(".")
 
     # Standard loopback domain names per RFC 6761
     if host_lower in {"localhost", "localhost.localdomain"} or host_lower.endswith(".localhost"):
