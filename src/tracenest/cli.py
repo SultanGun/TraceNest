@@ -9,6 +9,19 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+# Ensure robust cross-platform stdout/stderr encoding on Windows
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
 from tracenest import __product_name__, __version__
 from tracenest.config import (
     TraceNestConfig,
@@ -100,22 +113,22 @@ def init(
     if not config_file.exists():
         config_file.write_text(generate_default_toml(), encoding="utf-8")
         console.print(
-            f"[green]✓[/green] Created configuration file: [bold]{config_file.name}[/bold]"
+            f"[green][OK][/green] Created configuration file: [bold]{config_file.name}[/bold]"
         )
     else:
-        console.print(f"[dim]ℹ Existing configuration preserved: {config_file.name}[/dim]")
+        console.print("[dim]Existing configuration preserved: {config_file.name}[/dim]")
 
     console.print(
         Panel.fit(
             f"[bold green]TraceNest initialized successfully![/bold green]\n\n"
-            f"• Repository: [cyan]{repo_root}[/cyan]\n"
-            f"• Storage: [cyan]{storage_dir}[/cyan]\n"
-            f"• Database: [cyan]{db_path.name}[/cyan]\n\n"
+            f"* Repository: [cyan]{repo_root}[/cyan]\n"
+            f"* Storage: [cyan]{storage_dir}[/cyan]\n"
+            f"* Database: [cyan]{db_path.name}[/cyan]\n\n"
             f"Next steps:\n"
             f"  [bold]tracenest status[/bold]          - Check repo status\n"
             f"  [bold]tracenest snapshot create[/bold] - Record a baseline before AI starts\n"
             f"  [bold]tracenest review[/bold]          - Review modifications made by your agent",
-            title=f"✨ {__product_name__} Ready",
+            title=f"{__product_name__} Ready",
             border_style="green",
         )
     )
@@ -197,13 +210,13 @@ def snapshot_create(
 
     console.print(
         Panel.fit(
-            f"[bold green]✓ Baseline Snapshot Created[/bold green]\n\n"
-            f"• Snapshot ID: [bold cyan]{snap.snapshot_id}[/bold cyan]\n"
-            f"• Branch: [dim]{snap.git_branch or 'N/A'}[/dim]\n"
-            f"• Commit: [dim]{(snap.git_commit or 'Initial')[:10]}[/dim]\n"
-            f"• Tracked Files: {snap.file_count}\n"
-            f"• Fingerprint: [dim]{snap.working_tree_fingerprint[:16]}...[/dim]\n"
-            f"• Label: {snap.label or 'None'}",
+            f"[bold green][OK] Baseline Snapshot Created[/bold green]\n\n"
+            f"* Snapshot ID: [bold cyan]{snap.snapshot_id}[/bold cyan]\n"
+            f"* Branch: [dim]{snap.git_branch or 'N/A'}[/dim]\n"
+            f"* Commit: [dim]{(snap.git_commit or 'Initial')[:10]}[/dim]\n"
+            f"* Tracked Files: {snap.file_count}\n"
+            f"* Fingerprint: [dim]{snap.working_tree_fingerprint[:16]}...[/dim]\n"
+            f"* Label: {snap.label or 'None'}",
             border_style="green",
         )
     )
@@ -392,7 +405,7 @@ def review(
     # Findings Rendering
     console.print("\n[bold]Deterministic Review Findings:[/bold]")
     if not session.findings:
-        console.print("[green]✓ No security or policy violations detected.[/green]")
+        console.print("[green][OK] No security or policy violations detected.[/green]")
     else:
         for f in session.findings:
             sev_color = {
@@ -426,12 +439,12 @@ def review(
         console.print(
             Panel(
                 session.ai_summary,
-                title="🤖 AI Advisory Explanation (Untrusted/Advisory)",
+                title="[AI] Advisory Explanation (Untrusted/Advisory)",
                 border_style="magenta",
             )
         )
 
-    console.print(f"\n[green]✓ Reports exported to:[/green] [dim]{report_directory}[/dim]")
+    console.print(f"\n[green][OK] Reports exported to:[/green] [dim]{report_directory}[/dim]")
 
 
 @app.command()
@@ -496,7 +509,7 @@ def report(
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(content, encoding="utf-8")
-        console.print(f"[green]✓ Report written to {output}[/green]")
+        console.print(f"[green][OK] Report written to {output}[/green]")
     else:
         sys.stdout.write(content)
 
@@ -533,7 +546,7 @@ def compare(
 
     if result.warnings:
         for w in result.warnings:
-            console.print(f"[yellow]⚠ Warning:[/yellow] {w}")
+            console.print(f"[yellow][!] Warning:[/yellow] {w}")
 
     table = Table(title=f"Session Comparison: {session_a} vs {session_b}", border_style="cyan")
     table.add_column("Category", style="bold")
@@ -560,13 +573,13 @@ def compare(
         console.print("\n[bold red]Newly Introduced Findings in Session B:[/bold red]")
         for f in result.new_findings:
             console.print(
-                f"  • [{f.severity.value}] {f.title} at {f.file_path}:{f.line_number or ''}"
+                f"  * [{f.severity.value}] {f.title} at {f.file_path}:{f.line_number or ''}"
             )
 
     if result.resolved_findings:
         console.print("\n[bold green]Resolved Findings from Session A:[/bold green]")
         for f in result.resolved_findings:
-            console.print(f"  • [{f.severity.value}] {f.title} at {f.file_path}")
+            console.print(f"  * [{f.severity.value}] {f.title} at {f.file_path}")
 
 
 if __name__ == "__main__":
