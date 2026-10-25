@@ -1,0 +1,66 @@
+# TraceNest Configuration Example (examples/config.toml)
+# Understand every change your AI agent makes.
+
+[scope]
+# Restrict analysis to specified subdirectories (empty array includes entire repository)
+include_paths = ["src", "lib"]
+
+# Exclude generated, vendor, or temporary files
+exclude_paths = [
+    ".git",
+    ".tracenest",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "dist",
+    "build",
+    "*.egg-info",
+]
+
+# Analysis size ceiling per file (in kilobytes)
+max_file_size_kb = 512
+
+[rules]
+# Deterministic rule toggles
+secret_detection = true
+config_guard = true
+dangerous_patterns = true
+dependency_guard = true
+scope_guard = true
+
+# Severity threshold to report: INFO, LOW, MEDIUM, HIGH, CRITICAL
+severity_threshold = "LOW"
+
+# Suppress known non-issues by rule ID or finding ID
+suppressions = [
+    # "SEC-JWT-TOKEN",
+    # "PAT-JS-DANGEROUS-HTML"
+]
+
+[storage]
+# Local directory for session state and SQLite database
+dir_name = ".tracenest"
+db_name = "tracenest.db"
+retention_days = 30
+
+[ai]
+# AI provider options: "disabled" (default), "ollama" (local), or "openai" (remote compatible)
+provider = "disabled"
+
+# Local Ollama endpoint
+base_url = "http://localhost:11434"
+model = "llama3"
+
+# Environment variable containing your API key when using OpenAI-compatible endpoints
+api_key_env = "OPENAI_API_KEY"
+timeout_seconds = 30.0
+
+# Explicit opt-in required to transmit repository diffs to non-localhost URLs
+allow_remote_data_sharing = false
+
+[reporting]
+default_formats = ["markdown", "json"]
+
+[adapters]
+opencode_enabled = true
