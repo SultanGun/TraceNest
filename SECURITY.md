@@ -17,7 +17,7 @@ If you believe you have found a security vulnerability in TraceNest:
 1. **Do not** disclose the vulnerability publicly via GitHub Issues, public pull requests, or discussion forums.
 2. Please report the vulnerability privately via GitHub Security Advisories at:
    https://github.com/tracenest/tracenest/security/advisories/new
-   or by emailing: `security@tracenest.dev`
+   or by emailing: `sulfat2009@gmail.com`
 3. Include relevant reproduction steps, affected command-line flags, and a minimal reproduction repository if possible.
 
 ## Responsible Disclosure & Response Timeline
